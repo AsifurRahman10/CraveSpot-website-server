@@ -96,6 +96,33 @@ async function run() {
             res.send(result)
         })
 
+        // update a menu
+        app.patch('/menu/:id', verifyToken, verifyAdmin, async (req, res) => {
+            const id = req.params.id;
+            const data = req.body;
+            const filter = { _id: new ObjectId(id) };
+            const updateItem = {
+                $set: {
+                    name: data.name,
+                    recipe: data.recipe,
+                    category: data.category,
+                    category: data.category,
+                    price: data.price,
+                    image: data.image
+                }
+            }
+            const result = await menuCollection.updateOne(filter, updateItem);
+            res.send(result);
+        })
+
+        // get a single menu
+        app.get('/menu/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await menuCollection.findOne(query);
+            res.send(result);
+        })
+
         // product count
 
         app.get("/menuCount", async (req, res) => {
