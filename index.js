@@ -4,6 +4,7 @@ const app = express();
 const jwt = require("jsonwebtoken");
 require('dotenv').config()
 const port = process.env.PORT || 5000;
+const stripe = require("stripe")(process.env.Payment_secret);
 
 
 app.use(cors());
@@ -26,7 +27,8 @@ async function run() {
         const menuCollection = client.db('CraveSpotDB').collection('menu')
         const reviewCollection = client.db('CraveSpotDB').collection('reviews')
         const cartCollection = client.db('CraveSpotDB').collection('cart')
-        const userCollection = client.db('CraveSpotDB').collection('users')
+        const userCollection = client.db('CraveSpotDB').collection("users")
+        const paymentCollection = client.db('CraveSpotDB').collection('payment')
 
         // middleware for verify token
         const verifyToken = (req, res, next) => {
@@ -61,6 +63,36 @@ async function run() {
             const user = req.body;
             const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "1d" });
             res.send({ token });
+        })
+
+        // payment related api
+        app.post('/create-payment-intent', async (req, res) => {
+            const { price } = req.body;
+            const amount = parseInt(price * 100);
+            console.log(price, amount);
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: "usd",
+                payment_method_types: ["card"],
+            })
+            res.send({
+                clientSecret: paymentIntent.client_secret,
+            });
+        })
+
+        // save payment history to database
+        app.post('/paymentHistory', async (req, res) => {
+            const data = req.body;
+            const paymentHistoryResult = await paymentCollection.insertOne(data);
+            // res.send(paymentHistoryResult)
+            // delete old data
+            const query = {
+                _id: {
+                    $in: data.cartIds.map(id => new ObjectId(id))
+                }
+            }
+            const deleteCartData = await cartCollection.deleteMany(query);
+            res.send(deleteCartData)
         })
 
         // get all the menu item
@@ -198,6 +230,17 @@ async function run() {
                 }
             }
             const result = await userCollection.updateOne(filter, updatedUser);
+            res.send(result);
+        })
+
+        // get payment history of user
+        app.get('/paymentHistory/:email', verifyToken, async (req, res) => {
+            const email = req.params.email;
+            if (email !== req.decoded.email) {
+                return res.status(401).send({ message: "Unauthorized access." });
+            }
+            const query = { email: email };
+            const result = await paymentCollection.find(query).toArray();
             res.send(result);
         })
 
