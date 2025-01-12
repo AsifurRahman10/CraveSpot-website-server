@@ -65,6 +65,34 @@ async function run() {
             res.send({ token });
         })
 
+        // aggregate payments menuID to calculate category wise revenue
+        app.get('/order-stats', verifyToken, verifyAdmin, async (req, res) => {
+            const result = await paymentCollection.aggregate([
+                {
+                    $unwind: "$menuId"
+                },
+                {
+                    $lookup: {
+                        from: "menu",
+                        localField: "menuId",
+                        foreignField: "_id",
+                        as: "menuItems",
+                    }
+                },
+                {
+                    $unwind: "$menuItems",
+                },
+                {
+                    $group: {
+                        _id: "$menuItems.category",
+                        quantity: { $sum: 1 },
+                        revenue: { $sum: "$menuItems.price" }
+                    }
+                }
+            ]).toArray();
+            res.send(result);
+        })
+
         // payment related api
         app.post('/create-payment-intent', async (req, res) => {
             const { price } = req.body;
@@ -252,8 +280,34 @@ async function run() {
             }
             const query = { email: email };
             const user = await userCollection.findOne(query);
-            const admin = user.role === 'admin';
+            const admin = user?.role === 'admin';
             res.send({ admin });
+        })
+
+        // admin data count
+        app.get('/admin-stats', verifyToken, verifyAdmin, async (req, res) => {
+            const user = await userCollection.estimatedDocumentCount()
+            const product = await menuCollection.estimatedDocumentCount()
+            const order = await paymentCollection.estimatedDocumentCount()
+
+            // calculate the price
+            const result = await paymentCollection.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        totalRevenue: {
+                            $sum: "$price",
+                        }
+                    }
+
+                }
+            ]).toArray()
+
+            const revenue = result.length > 0 ? result[0].totalRevenue : 0;
+
+            res.send({ user, product, order, revenue })
+
+
         })
 
 
