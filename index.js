@@ -58,6 +58,14 @@ async function run() {
             next();
         }
 
+        // total order completed by a user
+        app.get('/completedOrder/:email', verifyToken, async (req, res) => {
+            const email = req.params.email;
+            const query = { email: email };
+            const result = await paymentCollection.find(query).toArray();
+            res.send(result)
+        })
+
         // create the token
         app.post('/jwt', (req, res) => {
             const user = req.body;
@@ -97,7 +105,6 @@ async function run() {
         app.post('/create-payment-intent', async (req, res) => {
             const { price } = req.body;
             const amount = parseInt(price * 100);
-            console.log(price, amount);
             const paymentIntent = await stripe.paymentIntents.create({
                 amount: amount,
                 currency: "usd",
